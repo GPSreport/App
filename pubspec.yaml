@@ -1,0 +1,29 @@
+name: gps_reporter
+description: Aplicación para enviar coordenadas GPS
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Dependencias para GPS y HTTP
+  geolocator: ^12.0.0          # Para obtener ubicación GPS
+  permission_handler: ^11.0.1  # Para manejar permisos
+  http: ^1.1.0                 # Para peticiones HTTP
+  intl: ^0.19.0               # Para formatear fechas
+  
+  cupertino_icons: ^1.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
