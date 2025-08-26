@@ -1,0 +1,8 @@
+# Copy this file to local.properties and update paths for your machine.
+# This file should NOT be checked into version control. See README-setup.md for details.
+
+# Path to the Flutter SDK on your machine (example):
+# flutter.sdk=C:\dev\flutter
+
+# Optional Android SDK override (if not using default Android SDK location):
+# sdk.dir=C:\Users\USUARIO\AppData\Local\Android\sdk

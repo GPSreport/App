@@ -8,7 +8,10 @@ plugins {
 android {
     namespace = "com.example.gps_reporter"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // Use the highest NDK required by plugins (they are backward compatible).
+    // See project tooling message: set to 27.0.12077973 to satisfy geolocator_android,
+    // package_info_plus and permission_handler_android.
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
