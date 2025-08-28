@@ -40,13 +40,13 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
   Position? _currentPosition;
   bool _isLoading = false;
   bool _locationPermissionGranted = false;
-  String _statusMessage = "Presiona 'Obtener Ubicación' para comenzar";
+  String _statusMessage = "Presiona 'Enviar' luego de introducir los datos de su reporte";
   Uint8List? _selectedImageBytes; // imagen seleccionada (comprimida)
   final TextEditingController _descripcionController = TextEditingController();
   
   // URL de tu API (cambiar por tu IP local si usas dispositivo físico)
   // Dirección de la API (ajustada a la IP pública y puerto 5000 del usuario)
-  static const String kApiUrl = "http://186.168.206.201:5000/reportes/";
+  static const String kApiUrl = "http://186.98.9.215:5000/reportes/";
   // Si usas un emulador o una IP local, actualiza este valor según corresponda.
   
   @override
@@ -131,7 +131,7 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
   // Generar foto dummy en base64
   String _generateDummyPhoto() {
     // Imagen dummy de 1x1 pixel en base64 (PNG transparente)
-    return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    return "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";
   }
 
   // Seleccionar imagen desde cámara o galería
@@ -235,10 +235,11 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
       }
     } catch (e) {
       setState(() {
-        _statusMessage = "Error al enviar datos: ${e.toString()}";
+        _statusMessage = "Error al enviar datos, no se pudo conectar con el servidor";
         _isLoading = false;
       });
-      _showMessage("Error al enviar datos: ${e.toString()}");
+      _showMessage("Error al enviar datos");
+      debugPrint("Error al enviar datos: $e");
     }
   }
 
@@ -252,6 +253,18 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
       ),
     );
   }
+
+  Future<void> _getLocationAndSendData() async {
+  await _getCurrentLocation(); // obtiene ubicación
+
+  if (_currentPosition != null) {
+    await _sendDataToServer(); // si se obtuvo, envía al servidor
+  } else {
+    _showMessage("No se pudo obtener la ubicación");
+  }
+}
+
+
 
   // Formatear coordenadas para mostrar
   String _formatCoordinate(double coordinate) {
@@ -390,15 +403,23 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
                           icon: const Icon(Icons.photo_library),
                           label: const Text('Galería'),
                         ),
-                        if (_selectedImageBytes != null)
-                          SizedBox(
-                            width: 64,
-                            height: 64,
-                            child: Image.memory(
-                              _selectedImageBytes!,
-                              fit: BoxFit.cover,
-                            ),
+
+                        if (_selectedImageBytes != null) ...[
+                          const SizedBox(height: 12),
+                          Center(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: SizedBox(
+                              width: 250,
+                              height: 192,
+                              child: Image.memory(
+                                      _selectedImageBytes!,
+                                      fit: BoxFit.cover,
+                                    )
+                              ),
+                            )                           
                           ),
+                        ]
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -417,8 +438,9 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
               ),
             ),
             
+            
             ElevatedButton.icon(
-              onPressed: _isLoading ? null : _getCurrentLocation,
+              onPressed: _isLoading ? null : _getLocationAndSendData,
               icon: _isLoading 
                 ? const SizedBox(
                     width: 20, 
@@ -426,34 +448,12 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    )
-                  )
-                : const Icon(Icons.my_location),
-              label: Text(_isLoading ? 'Obteniendo...' : 'Obtener Ubicación GPS'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-            
-            const SizedBox(height: 10),
-            
-            ElevatedButton.icon(
-              onPressed: (_currentPosition != null && !_isLoading) ? _sendDataToServer : null,
-              icon: _isLoading 
-                ? const SizedBox(
-                    width: 20, 
-                    height: 20, 
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    )
+                    ),
                   )
                 : const Icon(Icons.send),
-              label: Text(_isLoading ? 'Enviando...' : 'Enviar al Servidor'),
+              label: Text(_isLoading ? 'Procesando...' : 'Enviar'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
@@ -475,6 +475,8 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
                     ),
                     const SizedBox(height: 4),
                     const Text('• Los datos se envían a tu servidor local'),
+                    
+                    Text('• Al envíar se obtiene la ubicación de su dispositivo móvil'),
                     Text('• API: $kApiUrl'),
                   ],
                 ),
