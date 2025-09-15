@@ -45,5 +45,10 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Permisos para tomar/seleccionar fotos -->
+	<key>NSCameraUsageDescription</key>
+	<string>La aplicación necesita acceso a la cámara para tomar fotos de los reportes.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>La aplicación necesita acceso a la galería para seleccionar fotos de los reportes.</string>
 </dict>
 </plist>

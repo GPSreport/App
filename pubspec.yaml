@@ -13,17 +13,19 @@ dependencies:
     sdk: flutter
   
   # Dependencias para GPS y HTTP
-  geolocator: ^12.0.0          # Para obtener ubicación GPS
-  permission_handler: ^11.0.1  # Para manejar permisos
+  geolocator: ^14.0.2          # Para obtener ubicación GPS
+  permission_handler: ^12.0.1  # Para manejar permisos
   http: ^1.1.0                 # Para peticiones HTTP
-  intl: ^0.19.0               # Para formatear fechas
+  intl: ^0.20.2               # Para formatear fechas
+  image_picker: ^1.2.0      # Para seleccionar o tomar fotos
+  flutter_image_compress: ^2.4.0 # Para comprimir imágenes antes de convertir a base64
   
   cupertino_icons: ^1.0.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^5.0.0
 
 flutter:
   uses-material-design: true

@@ -3,6 +3,12 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Permisos para cámara y acceso a imágenes -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Lectura de medios (Android 13+) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Lectura de almacenamiento (para Android < 13) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <application
         android:label="gps_reporter"
         android:name="${applicationName}"
