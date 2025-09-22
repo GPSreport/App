@@ -14,3 +14,9 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## Comportamiento de autenticación
+
+- El botón "Enviar" solo está habilitado cuando existe una sesión iniciada en la app.
+- Si no hay sesión activa, el botón aparece deshabilitado y se muestra un mensaje indicando que debes iniciar sesión para habilitarlo.
+- Además, antes de iniciar el proceso de envío, se verifica nuevamente que el usuario esté autenticado.

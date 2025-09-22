@@ -44,19 +44,36 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
   Uint8List? _selectedImageBytes; // imagen seleccionada (comprimida)
   final TextEditingController _descripcionController = TextEditingController();
   
+  // Overlay para mensajes emergentes sobre el Drawer
+  OverlayEntry? _overlayEntry;
+  
   // URL de tu API (cambiar por tu IP local si usas dispositivo físico)
   // Dirección de la API (ajustada a la IP pública y puerto 8000 del usuario)
   static const String kApiUrl = "http://3.148.29.34/reportes/";
+  static const String kLoginUrl = "http://3.148.29.34/login";
   // Si usas un emulador o una IP local, actualiza este valor según corresponda.
   
-  // Controladores para login visual
+  // Controladores para login
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
+  
+  // Estado de autenticación
+  bool _isLoggedIn = false;
+  bool _isLoggingIn = false;
+  String _loggedInUser = "";
   
   @override
   void initState() {
     super.initState();
     _checkPermissions();
+  }
+
+  @override
+  void dispose() {
+    // Limpiar overlay si quedara activo
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+    super.dispose();
   }
 
   // Verificar permisos de ubicación
@@ -68,6 +85,113 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
         _statusMessage = "Se necesitan permisos de ubicación";
       }
     });
+  }
+
+  // Función de login
+  Future<void> _performLogin() async {
+    final usuario = _userController.text.trim();
+    final password = _passController.text.trim();
+    
+    if (usuario.isEmpty || password.isEmpty) {
+      _showMessage("Por favor completa usuario y contraseña");
+      return;
+    }
+
+    setState(() {
+      _isLoggingIn = true;
+    });
+
+    try {
+      final loginData = {
+        "usuario": usuario,
+        "clave": password,  // Cambiado de "password" a "clave" para coincidir con el backend
+      };
+
+      final response = await http.post(
+        Uri.parse(kLoginUrl),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(loginData),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        // Parsear respuesta JSON
+        final responseData = jsonDecode(response.body);
+        
+        if (responseData['success'] == true) {
+          // Login exitoso
+          setState(() {
+            _isLoggedIn = true;
+            _loggedInUser = responseData['usuario'] ?? usuario;
+            _isLoggingIn = false;
+          });
+          
+          // Limpiar campos de contraseña por seguridad
+          _passController.clear();
+          
+          if (mounted) {
+            _showMessage("¡Bienvenido $_loggedInUser!", isSuccess: true);
+            Navigator.of(context).pop(); // Cerrar drawer
+          }
+        } else {
+          // Login fallido según respuesta del servidor
+          setState(() {
+            _isLoggingIn = false;
+          });
+          if (mounted) {
+            _showMessage(responseData['message'] ?? "Error de autenticación");
+          }
+        }
+      } else if (response.statusCode == 401) {
+        // Credenciales incorrectas
+        setState(() {
+          _isLoggingIn = false;
+        });
+        if (mounted) {
+          _showMessage("Usuario o contraseña incorrectos");
+        }
+      } else if (response.statusCode == 400) {
+        // Error de validación
+        setState(() {
+          _isLoggingIn = false;
+        });
+        if (mounted) {
+          _showMessage("Datos de login inválidos");
+        }
+      } else {
+        // Otros errores del servidor
+        setState(() {
+          _isLoggingIn = false;
+        });
+        if (mounted) {
+          _showMessage("Error del servidor: ${response.statusCode}");
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isLoggingIn = false;
+      });
+      if (mounted) {
+        if (e.toString().contains('TimeoutException')) {
+          _showMessage("Tiempo de espera agotado. Verifica tu conexión.");
+        } else {
+          _showMessage("Error de conexión. Verifica tu red.");
+        }
+      }
+      debugPrint("Error de login: $e");
+    }
+  }
+
+  // Función de logout
+  void _performLogout() {
+    setState(() {
+      _isLoggedIn = false;
+      _loggedInUser = "";
+    });
+    _userController.clear();
+    _passController.clear();
+    _showMessage("Sesión cerrada");
   }
 
   // Solicitar permisos de ubicación
@@ -172,7 +296,7 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
         return status.isGranted;
       } else {
         // galería: solicitar photos (iOS) o storage (Android)
-        if (Theme.of(context).platform == TargetPlatform.iOS) {
+        if (mounted && Theme.of(context).platform == TargetPlatform.iOS) {
           final status = await Permission.photos.request();
           return status.isGranted;
         } else {
@@ -247,18 +371,78 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
     }
   }
 
-  // Mostrar mensaje emergente
+  // Mostrar mensaje emergente por encima del Drawer usando Overlay
   void _showMessage(String message, {bool isSuccess = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isSuccess ? Colors.green : Colors.red,
-        duration: const Duration(seconds: 3),
-      ),
+    if (!mounted) return;
+
+    // Si hay un mensaje visible, eliminarlo antes de mostrar el nuevo
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+
+  final overlay = Overlay.of(context, rootOverlay: true);
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          left: 16,
+          right: 16,
+          bottom: 24,
+          child: SafeArea(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: (isSuccess ? Colors.green : Colors.red).withValues(alpha: 0.95),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    )
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isSuccess ? Icons.check_circle : Icons.error,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        message,
+                        style: const TextStyle(color: Colors.white, fontSize: 15),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
+
+    overlay.insert(_overlayEntry!);
+
+    // Retirar automáticamente después de 3 segundos
+    Future.delayed(const Duration(seconds: 3)).then((_) {
+      if (mounted) {
+        _overlayEntry?.remove();
+        _overlayEntry = null;
+      }
+    });
   }
 
   Future<void> _getLocationAndSendData() async {
+  // Seguridad adicional: no permitir enviar si no hay sesión activa
+  if (!_isLoggedIn) {
+    _showMessage("Debes iniciar sesión para enviar el reporte");
+    return;
+  }
   await _getCurrentLocation(); // obtiene ubicación
 
   if (_currentPosition != null) {
@@ -288,59 +472,100 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           children: [
-            const Text(
-              '🔒 Iniciar Sesión',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _userController,
-              decoration: const InputDecoration(
-                labelText: 'Usuario',
-                border: OutlineInputBorder(),
+            if (!_isLoggedIn) ...[
+              // Interfaz de login
+              const Text(
+                '🔒 Iniciar Sesión',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Contraseña',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _userController,
+                decoration: const InputDecoration(
+                  labelText: 'Usuario',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.person),
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Funcionalidad de login pendiente')),
-                );
-              },
-              icon: const Icon(Icons.login),
-              label: const Text('Entrar'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _passController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Contraseña',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            GestureDetector(
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Funcionalidad de recuperación pendiente')),
-                );
-              },
-              child: const Text(
-                'Recuperar Usuario',
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _isLoggingIn ? null : _performLogin,
+                icon: _isLoggingIn 
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.login),
+                label: Text(_isLoggingIn ? 'Autenticando...' : 'Entrar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () {
+                  _showMessage('Contacta al administrador para recuperar tu usuario');
+                },
+                child: const Text(
+                  'Recuperar Usuario',
+                  style: TextStyle(
+                    color: Colors.blue,
+                    decoration: TextDecoration.underline,
+                    fontSize: 16,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ] else ...[
+              // Interfaz cuando está logueado
+              const Icon(
+                Icons.account_circle,
+                size: 64,
+                color: Colors.green,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '¡Hola $_loggedInUser!',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Sesión activa',
                 style: TextStyle(
-                  color: Colors.blue,
-                  decoration: TextDecoration.underline,
+                  color: Colors.green,
                   fontSize: 16,
                 ),
                 textAlign: TextAlign.center,
               ),
-            ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _performLogout,
+                icon: const Icon(Icons.logout),
+                label: const Text('Cerrar Sesión'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -504,7 +729,7 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
             
             
             ElevatedButton.icon(
-              onPressed: _isLoading ? null : _getLocationAndSendData,
+              onPressed: (_isLoading || !_isLoggedIn) ? null : _getLocationAndSendData,
               icon: _isLoading 
                 ? const SizedBox(
                     width: 20, 
@@ -522,6 +747,14 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
+            if (!_isLoggedIn) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Debes iniciar sesión para habilitar el botón de envío.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.black54),
+              ),
+            ],
             
             const SizedBox(height: 20),
             
