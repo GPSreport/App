@@ -48,9 +48,12 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
   OverlayEntry? _overlayEntry;
   
   // URL de tu API (cambiar por tu IP local si usas dispositivo físico)
-  // Dirección de la API (ajustada a la IP pública y puerto 8000 del usuario)
-  static const String kApiUrl = "http://3.148.29.34/reportes/";
-  static const String kLoginUrl = "http://3.148.29.34/login";
+  // Para desarrollo local (servidor corriendo en puerto 5000)
+  static const String kApiUrl = "http://localhost:5000/reportes/";
+  static const String kLoginUrl = "http://localhost:5000/login";
+  static const String kRegisterUrl = "http://localhost:5000/usuarios/crear";
+  // Para emulador Android usar: "http://10.0.2.2:5000/"
+  // Para dispositivo físico usar tu IP local: "http://192.168.1.xxx:5000/"
   // Si usas un emulador o una IP local, actualiza este valor según corresponda.
   
   // Controladores para login
@@ -60,6 +63,7 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
   // Estado de autenticación
   bool _isLoggedIn = false;
   bool _isLoggingIn = false;
+  bool _isRegistering = false;
   String _loggedInUser = "";
   
   @override
@@ -192,6 +196,145 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
     _userController.clear();
     _passController.clear();
     _showMessage("Sesión cerrada");
+  }
+
+  // Mostrar diálogo para crear usuario
+  Future<void> _openRegisterDialog() async {
+    final nombresController = TextEditingController();
+    final telefonoController = TextEditingController();
+    final usuarioController = TextEditingController();
+    final claveController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      barrierDismissible: !_isRegistering,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocalState) {
+            return AlertDialog(
+              title: const Text('Crear usuario'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nombresController,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombres',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: telefonoController,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'Teléfono',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: usuarioController,
+                      decoration: const InputDecoration(
+                        labelText: 'Usuario',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: claveController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Contraseña',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _isRegistering ? null : () { Navigator.of(ctx).pop(); },
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _isRegistering
+                      ? null
+                      : () async {
+                          setLocalState(() { _isRegistering = true; });
+                          await _registerUser(
+                            nombresController.text.trim(),
+                            telefonoController.text.trim(),
+                            usuarioController.text.trim(),
+                            claveController.text.trim(),
+                          );
+                          if (mounted) {
+                            setLocalState(() { _isRegistering = false; });
+                          }
+                        },
+                  icon: _isRegistering
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.person_add),
+                  label: Text(_isRegistering ? 'Creando...' : 'Crear'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _registerUser(String nombres, String telefono, String usuario, String clave) async {
+    if (nombres.isEmpty || telefono.isEmpty || usuario.isEmpty || clave.isEmpty) {
+      _showMessage('Completa todos los campos');
+      return;
+    }
+    try {
+      final payload = {
+        'usuario': usuario,
+        'clave': clave,
+        'nombres': nombres,
+        'telefono': telefono,
+      };
+      debugPrint('Attempting to register user at: $kRegisterUrl');
+      debugPrint('Payload: ${jsonEncode(payload)}');
+      final resp = await http
+          .post(
+            Uri.parse(kRegisterUrl),
+            headers: { 'Content-Type': 'application/json' },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 12));
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        final numero = data['numero_usuario'];
+        _showMessage('Usuario creado. Nº: ${numero ?? '-'}', isSuccess: true);
+        // Prefill login con el nuevo usuario
+        _userController.text = usuario;
+        _passController.text = clave;
+        if (!mounted) return; // Evitar usar context si el widget fue desmontado
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      } else {
+        // Intentar extraer mensaje de error
+        String msg = 'No se pudo crear el usuario';
+        debugPrint('Register HTTP Error: ${resp.statusCode}');
+        debugPrint('Register Response body: ${resp.body}');
+        try {
+          final err = jsonDecode(resp.body);
+          msg = err['detail']?.toString() ?? msg;
+        } catch (_) {}
+        _showMessage('Error ${resp.statusCode}: $msg');
+      }
+    } catch (e) {
+      final isTimeout = e.toString().contains('TimeoutException');
+      _showMessage(isTimeout ? 'Tiempo de espera agotado' : 'Error de conexión');
+      debugPrint('Register error: $e');
+    }
   }
 
   // Solicitar permisos de ubicación
@@ -513,6 +656,12 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _openRegisterDialog,
+                icon: const Icon(Icons.person_add),
+                label: const Text('Crear usuario'),
               ),
               const SizedBox(height: 16),
               GestureDetector(
