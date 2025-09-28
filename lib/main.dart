@@ -48,12 +48,10 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
   OverlayEntry? _overlayEntry;
   
   // URL de tu API (cambiar por tu IP local si usas dispositivo físico)
-  // Para desarrollo local (servidor corriendo en puerto 5000)
-  static const String kApiUrl = "http://localhost:5000/reportes/";
-  static const String kLoginUrl = "http://localhost:5000/login";
-  static const String kRegisterUrl = "http://localhost:5000/usuarios/crear";
-  // Para emulador Android usar: "http://10.0.2.2:5000/"
-  // Para dispositivo físico usar tu IP local: "http://192.168.1.xxx:5000/"
+  // Dirección de la API (ajustada a la IP pública y puerto 8000 del usuario)
+  static const String kApiUrl = "http://3.148.29.34/reportes/";
+  static const String kLoginUrl = "http://3.148.29.34/login";
+  static const String kRegisterUrl = "http://3.148.29.34/usuarios/crear";
   // Si usas un emulador o una IP local, actualiza este valor según corresponda.
   
   // Controladores para login
@@ -298,8 +296,6 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
         'nombres': nombres,
         'telefono': telefono,
       };
-      debugPrint('Attempting to register user at: $kRegisterUrl');
-      debugPrint('Payload: ${jsonEncode(payload)}');
       final resp = await http
           .post(
             Uri.parse(kRegisterUrl),
@@ -322,13 +318,11 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
       } else {
         // Intentar extraer mensaje de error
         String msg = 'No se pudo crear el usuario';
-        debugPrint('Register HTTP Error: ${resp.statusCode}');
-        debugPrint('Register Response body: ${resp.body}');
         try {
           final err = jsonDecode(resp.body);
           msg = err['detail']?.toString() ?? msg;
         } catch (_) {}
-        _showMessage('Error ${resp.statusCode}: $msg');
+        _showMessage(msg);
       }
     } catch (e) {
       final isTimeout = e.toString().contains('TimeoutException');
