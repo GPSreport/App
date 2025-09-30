@@ -8,6 +8,11 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'dart:typed_data';
 
+// URLs de la API
+const String kApiUrl = "http://3.148.29.34/reportes/";
+const String kLoginUrl = "http://3.148.29.34/login";
+const String kRegisterUrl = "http://3.148.29.34/usuarios/crear";
+
 void main() {
   runApp(const MyApp());
 }
@@ -35,6 +40,30 @@ class GPSReporterScreen extends StatefulWidget {
   State<GPSReporterScreen> createState() => _GPSReporterScreenState();
 }
 
+// Modelo para el estado del usuario
+class UserStatus {
+  final String nombre;
+  final String email;
+  final bool verificado;
+  final String estadoTexto;
+
+  UserStatus({
+    required this.nombre,
+    required this.email,
+    required this.verificado,
+    required this.estadoTexto,
+  });
+
+  factory UserStatus.fromJson(Map<String, dynamic> json) {
+    return UserStatus(
+      nombre: json['nombre'],
+      email: json['email'],
+      verificado: json['verificado'],
+      estadoTexto: json['estado_texto'],
+    );
+  }
+}
+
 class _GPSReporterScreenState extends State<GPSReporterScreen> {
   // Variables de estado
   Position? _currentPosition;
@@ -47,11 +76,6 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
   // Overlay para mensajes emergentes sobre el Drawer
   OverlayEntry? _overlayEntry;
   
-  // URL de tu API (cambiar por tu IP local si usas dispositivo físico)
-  // Dirección de la API (ajustada a la IP pública y puerto 8000 del usuario)
-  static const String kApiUrl = "http://3.148.29.34/reportes/";
-  static const String kLoginUrl = "http://3.148.29.34/login";
-  static const String kRegisterUrl = "http://3.148.29.34/usuarios/crear";
   // Si usas un emulador o una IP local, actualiza este valor según corresponda.
   
   // Controladores para login
@@ -63,6 +87,7 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
   bool _isLoggingIn = false;
   bool _isRegistering = false;
   String _loggedInUser = "";
+  String _loggedInUserEmail = "";
   
   @override
   void initState() {
@@ -126,6 +151,7 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
           setState(() {
             _isLoggedIn = true;
             _loggedInUser = responseData['usuario'] ?? usuario;
+            _loggedInUserEmail = responseData['email'] ?? '';
             _isLoggingIn = false;
           });
           
@@ -146,12 +172,23 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
           }
         }
       } else if (response.statusCode == 401) {
-        // Credenciales incorrectas
+        // Credenciales incorrectas o cuenta no verificada
         setState(() {
           _isLoggingIn = false;
         });
         if (mounted) {
-          _showMessage("Usuario o contraseña incorrectos");
+          try {
+            final errorData = jsonDecode(response.body);
+            final errorMessage = errorData['detail'] ?? "Usuario o contraseña incorrectos";
+            
+            if (errorMessage.contains("no verificada")) {
+              _showVerificationDialog(usuario, password);
+            } else {
+              _showMessage(errorMessage);
+            }
+          } catch (e) {
+            _showMessage("Usuario o contraseña incorrectos");
+          }
         }
       } else if (response.statusCode == 400) {
         // Error de validación
@@ -190,16 +227,162 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
     setState(() {
       _isLoggedIn = false;
       _loggedInUser = "";
+      _loggedInUserEmail = "";
     });
     _userController.clear();
     _passController.clear();
     _showMessage("Sesión cerrada");
   }
 
+  // Mostrar diálogo para cuenta no verificada
+  Future<void> _showVerificationDialog(String usuario, String password) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.email_outlined, color: Colors.orange),
+              SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'Cuenta no verificada',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Tu cuenta aún no ha sido verificada. Necesitas verificar tu correo electrónico para poder iniciar sesión.',
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  '💡 Nuevo sistema de verificación:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text('• Te enviaremos un código de 6 dígitos por email'),
+                const Text('• El código expira en 15 minutos'),
+                const Text('• Podrás verificar tu cuenta desde tu perfil'),
+                const SizedBox(height: 8),
+                const Text('• También revisa tu bandeja de spam'),
+              ],
+            ),
+          ),
+          actions: [
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      Navigator.of(ctx).pop();
+                      await _resendVerificationEmail(usuario, password);
+                    },
+                    icon: const Icon(Icons.security),
+                    label: const Text('Enviar código de verificación'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Entendido'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Obtener email del usuario desde el backend
+  Future<String?> _getUserEmail(String usuario, String password) async {
+    try {
+      final payload = {
+        'usuario': usuario,
+        'clave': password,
+      };
+
+      final response = await http.post(
+        Uri.parse(kLoginUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return data['email'];
+        }
+      } else if (response.statusCode == 403) {
+        // Usuario no verificado, pero podemos obtener el email
+        final data = jsonDecode(response.body);
+        if (data['detail'] is Map && data['detail']['email'] != null) {
+          return data['detail']['email'];
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Enviar código de verificación usando el nuevo endpoint
+  Future<void> _sendVerificationCode(String usuario, String password) async {
+    try {
+      // Primero obtener el email del usuario
+      final email = await _getUserEmail(usuario, password);
+      
+      if (email == null) {
+        _showMessage('Error al obtener información del usuario');
+        return;
+      }
+
+      final payload = {'email': email};
+
+      final response = await http.post(
+        Uri.parse('${kApiUrl.replaceAll('/reportes/', '')}/enviar-codigo'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        _showMessage('Código de verificación enviado a tu email. Expira en 15 minutos.', isSuccess: true);
+      } else {
+        final error = jsonDecode(response.body);
+        _showMessage(error['detail'] ?? 'Error enviando código de verificación');
+      }
+    } catch (e) {
+      _showMessage('Error de conexión al enviar código');
+    }
+  }
+
+  // Reenviar correo de verificación (método legacy)
+  Future<void> _resendVerificationEmail(String usuario, String password) async {
+    // Usar el nuevo método de código de 6 dígitos
+    await _sendVerificationCode(usuario, password);
+  }
+
   // Mostrar diálogo para crear usuario
   Future<void> _openRegisterDialog() async {
     final nombresController = TextEditingController();
     final telefonoController = TextEditingController();
+    final correoController = TextEditingController();
     final usuarioController = TextEditingController();
     final claveController = TextEditingController();
 
@@ -229,6 +412,16 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Teléfono',
                         border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: correoController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: 'Correo electrónico',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.email),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -264,6 +457,7 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
                           await _registerUser(
                             nombresController.text.trim(),
                             telefonoController.text.trim(),
+                            correoController.text.trim(),
                             usuarioController.text.trim(),
                             claveController.text.trim(),
                           );
@@ -284,9 +478,15 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
     );
   }
 
-  Future<void> _registerUser(String nombres, String telefono, String usuario, String clave) async {
-    if (nombres.isEmpty || telefono.isEmpty || usuario.isEmpty || clave.isEmpty) {
+  Future<void> _registerUser(String nombres, String telefono, String correo, String usuario, String clave) async {
+    if (nombres.isEmpty || telefono.isEmpty || correo.isEmpty || usuario.isEmpty || clave.isEmpty) {
       _showMessage('Completa todos los campos');
+      return;
+    }
+    
+    // Validar formato de correo electrónico
+    if (!_isValidEmail(correo)) {
+      _showMessage('Ingresa un correo electrónico válido');
       return;
     }
     try {
@@ -295,6 +495,7 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
         'clave': clave,
         'nombres': nombres,
         'telefono': telefono,
+        'correo': correo,
       };
       final resp = await http
           .post(
@@ -591,6 +792,14 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
 
 
 
+  // Validar formato de correo electrónico
+  bool _isValidEmail(String email) {
+    final emailRegex = RegExp(
+      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    );
+    return emailRegex.hasMatch(email);
+  }
+
   // Formatear coordenadas para mostrar
   String _formatCoordinate(double coordinate) {
     return coordinate.toStringAsFixed(6);
@@ -698,6 +907,27 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Cerrar drawer
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => UserProfileScreen(
+                        userEmail: _loggedInUserEmail,
+                        userName: _loggedInUser,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.person),
+                label: const Text('Mi Perfil'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: _performLogout,
                 icon: const Icon(Icons.logout),
@@ -926,5 +1156,351 @@ class _GPSReporterScreenState extends State<GPSReporterScreen> {
         ),
       ),
     );
+  }
+}
+
+// Pantalla de perfil de usuario
+class UserProfileScreen extends StatefulWidget {
+  final String userEmail;
+  final String userName;
+
+  const UserProfileScreen({
+    super.key,
+    required this.userEmail,
+    required this.userName,
+  });
+
+  @override
+  State<UserProfileScreen> createState() => _UserProfileScreenState();
+}
+
+class _UserProfileScreenState extends State<UserProfileScreen> {
+  UserStatus? _userStatus;
+  bool _isLoading = true;
+  bool _isSendingCode = false;
+  bool _isVerifyingCode = false;
+  final TextEditingController _codeController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserStatus();
+  }
+
+  // Cargar estado del usuario
+  Future<void> _loadUserStatus() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      final response = await http.get(
+        Uri.parse('${kApiUrl.replaceAll('/reportes/', '')}/usuario-estado/${widget.userEmail}'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _userStatus = UserStatus.fromJson(data);
+          _isLoading = false;
+        });
+      } else {
+        throw Exception('Error al cargar estado del usuario');
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showErrorSnackBar('Error al cargar estado del usuario: $e');
+    }
+  }
+
+  // Enviar código de verificación
+  Future<void> _sendVerificationCode() async {
+    setState(() => _isSendingCode = true);
+    
+    try {
+      final payload = {'email': widget.userEmail};
+      
+      final response = await http.post(
+        Uri.parse('${kApiUrl.replaceAll('/reportes/', '')}/enviar-codigo'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        _showSuccessSnackBar('Código enviado a tu email. Expira en 15 minutos.');
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['detail'] ?? 'Error enviando código');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error enviando código: $e');
+    } finally {
+      setState(() => _isSendingCode = false);
+    }
+  }
+
+  // Verificar código
+  Future<void> _verifyCode() async {
+    final codigo = _codeController.text.trim();
+    
+    if (codigo.length != 6 || !RegExp(r'^\d{6}$').hasMatch(codigo)) {
+      _showErrorSnackBar('Ingresa un código válido de 6 dígitos');
+      return;
+    }
+
+    setState(() => _isVerifyingCode = true);
+    
+    try {
+      final payload = {'codigo': codigo};
+      
+      final response = await http.post(
+        Uri.parse('${kApiUrl.replaceAll('/reportes/', '')}/verificar-codigo'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        _showSuccessSnackBar('¡Cuenta verificada exitosamente!');
+        _codeController.clear();
+        await _loadUserStatus(); // Recargar estado
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['detail'] ?? 'Error verificando código');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error verificando código: $e');
+    } finally {
+      setState(() => _isVerifyingCode = false);
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Perfil de Usuario'),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Información del usuario
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Información Personal',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildInfoRow('Nombre:', _userStatus?.nombre ?? 'N/A'),
+                          const SizedBox(height: 8),
+                          _buildInfoRow('Email:', _userStatus?.email ?? 'N/A'),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Estado de verificación
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Estado de Verificación',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Icon(
+                                _userStatus?.verificado == true
+                                    ? Icons.verified_user
+                                    : Icons.warning,
+                                color: _userStatus?.verificado == true
+                                    ? Colors.green
+                                    : Colors.orange,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _userStatus?.estadoTexto ?? 'Cargando...',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: _userStatus?.verificado == true
+                                        ? Colors.green
+                                        : Colors.orange,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  // Sección de verificación si no está verificado
+                  if (_userStatus?.verificado != true) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Verificar Cuenta',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Para activar todas las funciones de la aplicación, necesitas verificar tu cuenta con el código de 6 dígitos que te enviaremos por email.',
+                            ),
+                            const SizedBox(height: 16),
+                            
+                            // Botón para enviar código
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _isSendingCode ? null : _sendVerificationCode,
+                                icon: _isSendingCode
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.email),
+                                label: Text(_isSendingCode
+                                    ? 'Enviando código...'
+                                    : 'Enviar código de verificación'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                            ),
+                            
+                            const SizedBox(height: 16),
+                            
+                            // Campo para ingresar código
+                            TextField(
+                              controller: _codeController,
+                              keyboardType: TextInputType.number,
+                              maxLength: 6,
+                              decoration: const InputDecoration(
+                                labelText: 'Código de verificación',
+                                hintText: 'Ingresa el código de 6 dígitos',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.security),
+                              ),
+                            ),
+                            
+                            const SizedBox(height: 16),
+                            
+                            // Botón para verificar código
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _isVerifyingCode ? null : _verifyCode,
+                                icon: _isVerifyingCode
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.check_circle),
+                                label: Text(_isVerifyingCode
+                                    ? 'Verificando...'
+                                    : 'Verificar código'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w500,
+              color: Colors.grey,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 16),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    super.dispose();
   }
 }
